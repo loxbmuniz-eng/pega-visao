@@ -88,6 +88,7 @@ const SuincoSharePoint = (function () {
   let ouvintesExclusao = [];
   let ouvintesPresenca = [];
   let ouvintesDevolucao = [];
+  let ouvintesCorrecao = [];
   let ouvintesFechamentoPrograma = [];
   let timerRenovacao = null;
   /* NÃO começa em `Date.now()`: começar em "agora" é o que transformaria a
@@ -1135,6 +1136,25 @@ const SuincoSharePoint = (function () {
     });
   }
 
+  /* Correção sem telefonema (14/10/2026, migração 067): o setor PEDE, a
+     Administração decide. Também fora da fila offline, pelo mesmo motivo
+     da correção: um pedido que sobe sozinho meia hora depois pede para
+     voltar uma etapa que já mudou. */
+  const correcaoApi = {
+    pedir(cargaId, motivo) {
+      return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/pedir-correcao`, {
+        metodo: 'POST', corpo: { motivo },
+      });
+    },
+    abertos() { return chamar('/api/pedidos-correcao'); },
+    decidir(pedidoId, decisao, obs) {
+      return chamar(`/api/pedidos-correcao/${encodeURIComponent(pedidoId)}/decidir`, {
+        metodo: 'POST', corpo: { decisao, obs: obs || '' },
+      });
+    },
+  };
+  function aoAtualizarCorrecao(fn) { if (typeof fn === 'function') ouvintesCorrecao.push(fn); }
+
   async function corrigirDataProgramacao(cargaId, data, motivo) {
     return chamar(`/api/cargas/${encodeURIComponent(cargaId)}/data-programacao`, {
       metodo: 'POST', corpo: { data, motivo },
@@ -1830,6 +1850,15 @@ const SuincoSharePoint = (function () {
     /* Devoluções são servidor-first (sem cópia local sincronizada), então o
        evento não dispara pull de cargas — só avisa a tela de Devoluções
        para recarregar a lista dela, se estiver aberta. */
+    /* Pedido de correção aberto ou decidido: é notícia para a tela (a caixa
+       da Administração, o aviso para quem pediu). Se aprovou, a carga muda
+       pelo `carga:atualizada` de sempre. */
+    socket.on('correcao:pedido', (pedido) => {
+      ouvintesCorrecao.forEach((fn) => {
+        try { fn(pedido); } catch (e) { console.warn('[Suinco] aviso de correção:', e); }
+      });
+    });
+
     socket.on('devolucao:atualizada', (aviso) => {
       ouvintesDevolucao.forEach((fn) => {
         try { fn(aviso); } catch (e) { console.warn('[Suinco] aviso de devolução:', e); }
@@ -2495,6 +2524,7 @@ const SuincoSharePoint = (function () {
       return chamar('/api/movimentacoes/apagar', { metodo: 'POST', corpo: { placa, motivo } });
     },
     devolucoes: devolucoesApi, aoAtualizarDevolucao,
+    correcao: correcaoApi, aoAtualizarCorrecao,
     avisos: avisosApi,
     frete: freteApi,
     /* Transportadora sem placa (09/10/2026, #129, migração 066). */

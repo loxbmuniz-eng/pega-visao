@@ -138,10 +138,10 @@
     e o que fazer quando alguma coisa para. Escrito para o arquiteto do sistema —
     e para responder a TI sem hesitar.</p>
   <div class="selo">
-    <span>Atualizado 27/08/2026</span>
-    <span>8 setores em produção</span>
-    <span>37 migrações</span>
-    <span>281 testes de servidor · 111 de tela</span>
+    <span>Atualizado 14/10/2026</span>
+    <span>13 setores · 13 abas</span>
+    <span>66 migrações no servidor</span>
+    <span>738 testes de servidor · 281 de tela</span>
   </div>
 </header>
 
@@ -157,7 +157,8 @@
       <li><a href="#mexer"><span class="n">07</span>Onde e quando mexer</a></li>
       <li><a href="#socorro"><span class="n">08</span>Quando algo para</a></li>
       <li><a href="#chaves"><span class="n">09</span>Chaves e acessos</a></li>
-      <li><a href="#pendencias"><span class="n">10</span>O que falta</a></li>
+      <li><a href="#novidades"><span class="n">10</span>O que entrou desde agosto</a></li>
+      <li><a href="#pendencias"><span class="n">11</span>O que falta</a></li>
     </ol>
   </nav>
 
@@ -168,10 +169,11 @@
         Decore o primeiro parágrafo; o resto do documento só te dá o que sustentar.</p>
       <div class="carta">
         <p class="fala">"É um sistema web próprio que controla o embarque de cargas da
-          cooperativa em tempo real. Oito setores usam a mesma tela: a Logística programa,
+          cooperativa em tempo real. Os setores usam a mesma tela: a Logística programa,
           a Portaria registra entrada e saída, a Expedição carrega, o Faturamento emite a
-          nota. Toda ação fica assinada com nome, setor e horário. Roda em servidor próprio,
-          com banco PostgreSQL e backup diário."</p>
+          nota, e o pagamento do frete e as devoluções correm no mesmo lugar. Toda ação fica
+          assinada com nome, setor e horário. Roda em servidor próprio, com banco
+          PostgreSQL, backup diário e restauração provada toda semana."</p>
         <ul class="lista" style="margin-top:18px">
           <li><strong>Qual o problema que ele resolve:</strong> antes a informação vivia em
             planilhas e ligações. "Onde está o caminhão?" era telefone para o pátio, várias
@@ -180,7 +182,12 @@
             código no nosso repositório — não é software alugado de terceiro, não tem
             mensalidade por usuário e a cooperativa é dona do código e dos dados.</li>
           <li><strong>Onde os dados moram:</strong> em servidor contratado pela cooperativa,
-            no Brasil, com backup automático diário guardado por 14 dias.</li>
+            no Brasil, com backup automático diário guardado por 14 dias — e todo domingo o
+            próprio servidor restaura o backup num banco de teste para provar que ele presta.</li>
+          <li><strong>Quem usa:</strong> 13 setores cadastrados no servidor — Logística,
+            Portaria, Expedição, Faturamento, Administração, Comercial, Controles Internos,
+            Central de Notas, Qualidade, Pagamento de Frete e as filiais 105 BSB, 106 Bahia e
+            107 ES (essas três só nas devoluções).</li>
         </ul>
       </div>
     </section>
@@ -191,7 +198,7 @@
         a resposta curta, depois o detalhe que a TI vai querer.</p>
 
       <div class="carta">
-        <p class="fala">"Frontend em JavaScript puro, sem framework. Backend em Node.js com
+        <p class="fala">"Frontend em JavaScript puro, sem framework. Backend em Node.js 24 com
           Express. Banco PostgreSQL. Tempo real por Socket.IO. Front hospedado na Vercel,
           backend em VPS própria com Nginx e HTTPS."</p>
       </div>
@@ -203,12 +210,12 @@
           <tbody>
             <tr>
               <td><b>Painel (o que abre no navegador)</b></td>
-              <td><code>HTML + CSS + JavaScript</code> sem framework, empacotado num arquivo único</td>
+              <td><code>HTML + CSS + JavaScript</code> sem framework — um arquivo por assunto na pasta <code>app/</code>, juntados num arquivo único na publicação</td>
               <td>Abre rápido no celular do pátio, funciona offline depois da primeira visita, e não depende de biblioteca de terceiro que muda sozinha.</td>
             </tr>
             <tr>
               <td><b>Servidor</b></td>
-              <td><code>Node.js 20+</code> com <code>Express 4</code></td>
+              <td><code>Node.js 24</code> (v24.21.0 no servidor) com <code>Express 4</code></td>
               <td>É a mesma linguagem do painel — uma pessoa só consegue dar manutenção nas duas pontas.</td>
             </tr>
             <tr>
@@ -237,6 +244,16 @@
               <td>Notificação chega com o aplicativo fechado, sem precisar publicar app em loja.</td>
             </tr>
             <tr>
+              <td><b>Leitura de PDF e planilha</b></td>
+              <td><code>pdfjs-dist</code>, <code>fflate</code>, <code>cfb</code></td>
+              <td>O servidor lê sozinho o PDF do frete e os relatórios exportados do Atak (XLS/XLSX), sem mandar arquivo para serviço de terceiro.</td>
+            </tr>
+            <tr>
+              <td><b>Vigias</b></td>
+              <td>Vigia de dentro (<code>cron</code> no servidor) · Vigia de fora (<code>GitHub Actions</code>)</td>
+              <td>O de dentro reinicia o servidor travado e confere backup, disco e certificado; o de fora vê o painel e o servidor a cada 30 minutos — e avisa mesmo se a máquina inteira cair.</td>
+            </tr>
+            <tr>
               <td><b>Hospedagem</b></td>
               <td>Painel na <code>Vercel</code> · Servidor em <code>VPS Hostinger</code> com <code>Nginx</code> + <code>Certbot</code></td>
               <td>O painel é estático e a Vercel entrega de graça e rápido; o servidor precisa de banco e disco, então fica em máquina própria.</td>
@@ -246,8 +263,10 @@
       </div>
       <div class="nota"><b>Se perguntarem "e se o desenvolvedor sumir?":</b> o código está
         num repositório Git com histórico completo, os testes automatizados descrevem o
-        comportamento esperado, e existe um manual do servidor com todos os comandos.
-        Qualquer desenvolvedor Node consegue continuar.</div>
+        comportamento esperado (738 no servidor, 281 de tela), existe um manual do servidor
+        com todos os comandos, e o registro de ocorrências guarda cada defeito já visto — 139
+        até hoje — com o teste que impede a volta dele. Qualquer desenvolvedor Node consegue
+        continuar.</div>
     </section>
 
     <section id="camadas">
@@ -256,8 +275,9 @@
       <div class="carta">
         <div class="passo"><div class="passo-n">1</div><div>
           <p><b>O painel</b> (<code style="font-family:var(--mono);color:var(--ouro)">embarquesuinco.com.br</code>) roda no navegador da pessoa.
-          Ele grava primeiro no próprio aparelho e só depois manda pro servidor — por isso
-          continua funcionando se a internet do pátio cair.</p></div></div>
+          Ele mostra o resultado na hora e guarda numa fila o que ainda não subiu — por isso
+          continua funcionando se a internet do pátio cair. <b>Mas quem decide é o servidor:</b>
+          se ele recusar, a tela avisa; recusa nunca é silenciosa.</p></div></div>
         <div class="passo"><div class="passo-n">2</div><div>
           <p><b>O servidor</b> (<code style="font-family:var(--mono);color:var(--ouro)">api.embarquesuinco.com.br</code>) é quem manda de verdade.
           Ele confere se aquele setor pode fazer aquilo, grava no banco e avisa todo mundo
@@ -269,7 +289,8 @@
       <div class="nota"><b>A consequência prática:</b> quando você publica uma mudança no
         painel, ela chega a todo mundo em minutos pela Vercel. Quando a mudança é no
         servidor, <b>alguém precisa rodar a atualização na VPS</b> — senão o painel novo
-        conversa com um servidor velho.</div>
+        conversa com um servidor velho. Hoje (14/10) os dois estão alinhados: o que
+        mudou depois do servidor (portões 84, 88 e 89) foi só painel.</div>
     </section>
 
     <section id="seguranca">
@@ -292,8 +313,12 @@
           <li><strong>Tem backup?</strong> Diário, automático, guardado 14 dias — e existe um
             script que <b>testa a restauração</b>, porque backup que nunca foi restaurado é
             promessa, não backup.</li>
-          <li><strong>Passou por teste?</strong> 281 testes automatizados no servidor e 111
-            baterias de tela, rodados a cada publicação.</li>
+          <li><strong>Passou por teste?</strong> 738 testes automatizados no servidor e 281
+            baterias de tela, rodados a cada publicação — nada vai ao ar com um vermelho. E o
+            GitHub roda os testes do servidor de novo a cada publicação, fora daqui.</li>
+          <li><strong>Quem vigia?</strong> O próprio servidor se confere (travamento a cada
+            minuto, backup e disco todo dia, restauração todo domingo) e um vigia de fora, no
+            GitHub, confere a cada 30 minutos se o painel e o servidor respondem.</li>
         </ul>
       </div>
 
@@ -302,8 +327,8 @@
         <b>Não minta para a TI — o custo de ser pego é maior que o de admitir.</b> Três pontos
         que eles podem levantar e você deve admitir de frente: (1) o sistema nasceu fora do
         processo formal de TI; (2) hoje ele depende de uma VPS que só você e eu acessamos —
-        <b>não há um segundo administrador</b>; (3) a senha de root do servidor precisa ser
-        trocada, e isso ainda não foi feito. Levar esses três pontos você mesmo transforma
+        <b>não há um segundo administrador</b>; (3) não há registro de que a senha de root do
+        servidor foi trocada. Levar esses três pontos você mesmo transforma
         uma auditoria hostil numa conversa de melhoria.
       </div>
       <div class="nota"><b>A proposta que fecha a conversa:</b> ofereça dar acesso de leitura
@@ -331,10 +356,11 @@ su postgres
 psql embarque_suinco
 
 <span class="c"># exemplo: tudo que aconteceu com uma placa nos últimos 7 dias</span>
-SELECT c.numero_carga, c.placa, e.acao, e.setor, e.autor, e.criado_em
-FROM log_eventos e JOIN fact_viagens c ON c.id = e.carga_id
-WHERE c.placa = 'ABC1D23' AND e.criado_em > now() - interval '7 days'
-ORDER BY e.criado_em;
+<span class="c"># (troque COLOQUE_A_PLACA pela placa, sem traço)</span>
+SELECT c.numero_carga, e.placa, e.acao, e.setor, e.operador_nome, e.data_evento
+FROM log_eventos e LEFT JOIN fact_viagens c ON c.carga_id = e.carga_id
+WHERE e.placa = 'COLOQUE_A_PLACA' AND e.data_evento > now() - interval '7 days'
+ORDER BY e.data_evento;
 
 <span class="c"># sair: \q  e depois exit</span></pre>
       </div>
@@ -345,15 +371,15 @@ ORDER BY e.criado_em;
       <div class="cmd">
         <div class="cmd-topo"><span class="cmd-onde">terminal da VPS</span>
           <button class="cmd-copiar" type="button">Copiar</button></div>
-<pre>cd /opt/suinco-src
-bash entregaveis/suinco_logistica/backend/diagnostico.sh</pre>
+<pre>bash /opt/suinco-src/entregaveis/suinco_logistica/backend/diagnostico.sh</pre>
       </div>
     </section>
 
     <section id="backup">
       <h2>Backup — onde está e como pegar</h2>
-      <p class="sub">O backup roda sozinho todo dia e guarda 14 dias. Você não precisa criar
-        nada; precisa saber achar e restaurar.</p>
+      <p class="sub">O backup roda sozinho todo dia e guarda 14 dias. Todo dia o vigia confere
+        se o de hoje existe e tem tamanho de backup; todo domingo ele restaura num banco de
+        teste e compara com a produção. Você não precisa criar nada; precisa saber achar.</p>
 
       <div class="grade g2">
         <div class="carta">
@@ -362,6 +388,7 @@ bash entregaveis/suinco_logistica/backend/diagnostico.sh</pre>
             <dt>Frequência</dt><dd>Diária, automática</dd>
             <dt>Retenção</dt><dd>14 dias</dd>
             <dt>Formato</dt><dd><code>.sql.gz</code> (dump comprimido)</dd>
+            <dt>Prova</dt><dd>Restauração testada todo domingo, sozinha</dd>
           </dl>
         </div>
         <div class="carta">
@@ -396,21 +423,28 @@ bash entregaveis/suinco_logistica/backend/diagnostico.sh</pre>
 <pre>scp root@2.25.95.253:/var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz ~/Downloads/</pre>
       </div>
 
-      <h3>Restaurar <span class="chip c-pa">último recurso</span></h3>
-      <div class="aviso"><b>Restaurar apaga tudo que aconteceu depois daquele backup.</b>
-        Um dia inteiro de pátio pode sumir. Só faça isso com o sistema já quebrado, sabendo
-        exatamente o que perde — e, se der, me chame antes.</div>
+      <h3>Provar que o backup presta <span class="chip c-ok">sem risco</span></h3>
+      <p class="sub" style="margin-bottom:12px">Restaura o backup mais recente num banco
+        descartável, compara tabela por tabela com a produção e apaga o banco de teste no fim.
+        Da produção, só lê. É o mesmo que o vigia roda todo domingo.</p>
       <div class="cmd">
-        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS · com o sistema parado</span>
+        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS</span>
           <button class="cmd-copiar" type="button">Copiar</button></div>
-<pre>systemctl stop embarque-suinco
-gunzip -c /var/backups/embarque-suinco/embarque_suinco_AAAAMMDD.sql.gz | su postgres
-systemctl start embarque-suinco</pre>
+<pre>bash /opt/suinco-src/entregaveis/suinco_logistica/backend/scripts/testar_restauracao_backup.sh</pre>
       </div>
+
+      <h3>Restaurar por cima da produção <span class="chip c-pa">último recurso</span></h3>
+      <div class="aviso"><b>Restaurar apaga tudo que aconteceu depois daquele backup.</b>
+        Um dia inteiro de pátio pode sumir. Por isso o comando <b>não fica neste mapa</b>:
+        restaurar se faz comigo, com o sistema já quebrado, o backup escolhido provado antes
+        pelo script acima, e sabendo exatamente o que se perde.
+        <br><br>O comando que este mapa mostrava até 27/08 (<code style="font-family:var(--mono)">gunzip … | su postgres</code>)
+        <b>não restaurava</b> — mandava o SQL para o terminal, não para o banco. Saiu.</div>
       <div class="nota"><b>A prova de que o backup presta:</b> existe um script que restaura
         num banco descartável e confere se os dados chegaram inteiros —
         <code style="font-family:var(--mono);color:var(--ouro)">scripts/testar_restauracao_backup.sh</code>. Ele roda junto com o
-        <code style="font-family:var(--mono);color:var(--ouro)">atualizar_tudo.sh</code>.</div>
+        <code style="font-family:var(--mono);color:var(--ouro)">atualizar_tudo.sh</code> e, desde 05/10, sozinho todo domingo de madrugada.
+        Rodou no servidor pela primeira vez em 30/09: 13 tabelas batendo com a produção.</div>
     </section>
 
     <section id="mexer">
@@ -422,10 +456,12 @@ systemctl start embarque-suinco</pre>
         <table>
           <thead><tr><th>Quero mudar…</th><th>Onde vive</th><th>Risco</th><th>Precisa fazer o quê</th></tr></thead>
           <tbody>
-            <tr><td>Texto, cor, posição de botão</td><td><code>styles.css</code>, <code>app.js</code></td>
+            <tr><td>Texto, cor, posição de botão</td><td><code>styles.css</code>, <code>tema2027/</code>, <code>app/</code></td>
               <td><span class="chip c-ok">baixo</span></td><td>Publicar o painel. Chega sozinho.</td></tr>
-            <tr><td>Uma tela nova, um campo novo na tela</td><td><code>app.js</code>, <code>index_suinco.html</code></td>
+            <tr><td>Uma tela nova, um campo novo na tela</td><td><code>app/</code> (um arquivo por assunto), <code>index_suinco.html</code></td>
               <td><span class="chip c-ok">baixo</span></td><td>Publicar o painel + rodar a bateria de testes.</td></tr>
+            <tr><td>O estado da carga, a sincronia, a fila offline</td><td><code>data.js</code>, <code>suinco-api.js</code></td>
+              <td><span class="chip c-at">médio</span></td><td>Publicar o painel com a bateria inteira. É o coração da tela: erro aqui some com dado.</td></tr>
             <tr><td>Regra de quem pode fazer o quê</td><td><code>backend/src/dominio/fluxo.js</code></td>
               <td><span class="chip c-at">médio</span></td><td>Publicar <b>e</b> atualizar a VPS. Painel novo com servidor velho recusa a ação.</td></tr>
             <tr><td>Um campo novo guardado no banco</td><td><code>backend/migrations/</code></td>
@@ -443,6 +479,9 @@ systemctl start embarque-suinco</pre>
             momento para descobrir um defeito. Prefira início da manhã ou fim do dia.</li>
           <li><strong>Sem teste que prove.</strong> A regra desta casa: primeiro escreve o
             teste que falha, depois corrige. Correção sem teste volta.</li>
+          <li><strong>Sem passar pelo portão.</strong> Toda publicação passa pelo
+            <code style="font-family:var(--mono);color:var(--ouro)">publicar.sh</code>: roda a bateria inteira e só publica com tudo verde.
+            Ninguém publica direto na branch de entrega.</li>
           <li><strong>Duas mudanças de uma vez.</strong> Se quebrar, você não sabe qual foi.</li>
           <li><strong>Sexta à tarde.</strong> Clássico, e verdadeiro.</li>
         </ul>
@@ -450,14 +489,22 @@ systemctl start embarque-suinco</pre>
 
       <h3>O comando que publica no servidor</h3>
       <div class="cmd">
-        <div class="cmd-topo"><span class="cmd-onde">terminal da VPS · depois de cada publicação minha</span>
+        <div class="cmd-topo"><span class="cmd-onde">1º · no SEU computador — espere aparecer root@…#</span>
           <button class="cmd-copiar" type="button">Copiar</button></div>
-<pre>cd /opt/suinco-src && git pull
-bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
+<pre>ssh root@2.25.95.253</pre>
       </div>
+      <div class="cmd">
+        <div class="cmd-topo"><span class="cmd-onde">2º · já dentro da VPS, quando eu pedir</span>
+          <button class="cmd-copiar" type="button">Copiar</button></div>
+<pre>bash /opt/suinco-src/entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
+      </div>
+      <div class="aviso"><b>Um comando por vez.</b> Colados juntos, o segundo vira senha.
+        E todo comando que eu mando para o servidor é conferido antes, linha por linha, na
+        versão que está no servidor e na publicada (regra de 30/09/2026).</div>
       <div class="nota"><b>Por que <code style="font-family:var(--mono)">atualizar_tudo.sh</code> e não <code style="font-family:var(--mono)">atualizar.sh</code>:</b>
-        o primeiro faz tudo — atualiza, aplica migrações, testa a restauração do backup e
-        imprime um resumo do que aconteceu. É o que você me manda depois.</div>
+        o primeiro faz tudo — puxa o código, aplica migrações, testa a restauração do backup,
+        confere os vigias e imprime um bloco <b>COPIE DAQUI</b> com o resumo. É esse bloco que
+        você me manda depois — é a única forma de eu saber que o servidor mudou.</div>
     </section>
 
     <section id="socorro">
@@ -485,7 +532,7 @@ bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
             <tr>
               <td><b>"O relatório em PDF não sai"</b></td>
               <td>O Chromium do servidor não está pronto</td>
-              <td>Conferir em <code>/health</code> o campo <code>pdf.pronto</code>. Se vier falso, rodar <code>atualizar.sh</code> na VPS.</td>
+              <td>Conferir em <code>/health</code> o campo <code>pdf.pronto</code>. Se vier falso, rodar <code>atualizar_tudo.sh</code> na VPS.</td>
             </tr>
             <tr>
               <td><b>"Não chega notificação no celular"</b></td>
@@ -496,6 +543,16 @@ bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
               <td><b>"Sumiu uma carga"</b></td>
               <td>Quase sempre foi cancelada ou excluída por alguém — nada some sozinho</td>
               <td>Histórico → buscar pelo número. O log mostra quem fez e quando. Administração consegue restaurar.</td>
+            </tr>
+            <tr>
+              <td><b>"Chegou aviso de carga parada há 3 h"</b></td>
+              <td>O vigia do pátio (a cada 5 min) achou carga há mais de 3 h no pátio</td>
+              <td>Tocar no aviso e abrir a carga no Pátio ao vivo; da carga, o botão leva à linha do tempo dela no Histórico.</td>
+            </tr>
+            <tr>
+              <td><b>E-mail do GitHub: "Vigia" falhou</b></td>
+              <td>O vigia de fora não alcançou o painel ou o servidor três vezes seguidas</td>
+              <td>Abrir <code>api.embarquesuinco.com.br/health</code>. Se não responder, é o servidor: <code>systemctl status embarque-suinco</code>.</td>
             </tr>
             <tr>
               <td><b>Tudo lento, todo mundo reclamando</b></td>
@@ -520,37 +577,86 @@ bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
           <tbody>
             <tr><td><b>Servidor (root)</b></td><td>SSH em <code>2.25.95.253</code></td><td>Só na sua cabeça / gerenciador de senhas. <span class="chip c-pa">trocar</span></td></tr>
             <tr><td><b>Banco de dados</b></td><td>Usuário <code>postgres</code> na VPS</td><td><code>/opt/embarque-suinco/.env</code></td></tr>
-            <tr><td><b>Assinatura de sessão</b></td><td>Login dos operadores</td><td><code>.env</code> → <code>JWT_SEGREDO</code></td></tr>
+            <tr><td><b>Assinatura de sessão</b></td><td>Login dos operadores</td><td><code>.env</code> → <code>JWT_SECRET</code></td></tr>
+            <tr><td><b>Senha da aba Usuários</b></td><td>Gerenciar operadores (desde 09/10)</td><td><code>.env</code> → <code>SENHA_USUARIOS_HASH</code> (só o hash, nunca a senha)</td></tr>
             <tr><td><b>Aviso no celular</b></td><td>Push nos aparelhos</td><td><code>.env</code> → <code>VAPID_PUBLICA</code> / <code>VAPID_PRIVADA</code></td></tr>
-            <tr><td><b>Repositório</b></td><td>GitHub · código-fonte</td><td>Sua conta GitHub</td></tr>
+            <tr><td><b>Aviso de erro (Sentry)</b></td><td>Erro da tela e do servidor chegando sozinho</td><td><code>.env</code> → <code>SENTRY_DSN</code> · <span class="chip c-at">desligado</span> até a chave entrar</td></tr>
+            <tr><td><b>Repositório</b></td><td>GitHub · código-fonte e o vigia de fora</td><td>Sua conta GitHub</td></tr>
             <tr><td><b>Publicação do painel</b></td><td>Vercel</td><td>Conta Vercel ligada ao GitHub</td></tr>
             <tr><td><b>Domínio</b></td><td><code>embarquesuinco.com.br</code></td><td>Registro em nome da cooperativa</td></tr>
           </tbody>
         </table>
       </div>
       <div class="aviso"><b>Pendência de segurança em aberto:</b> a senha de root do servidor
-        foi exposta em conversa e <b>ainda não foi trocada</b>. Comando na VPS:
-        <code style="font-family:var(--mono);color:var(--vermelho)">passwd root</code>. É rápido e elimina o único risco real desta lista.</div>
+        já foi escrita em conversa, e <b>não há registro de que foi trocada</b>. Comando na VPS:
+        <code style="font-family:var(--mono);color:var(--vermelho)">passwd root</code>. Se já trocou, me diga e sai desta lista.</div>
+    </section>
+
+    <section id="novidades">
+      <h2>O que entrou desde agosto</h2>
+      <p class="sub">De 27/08 a 14/10/2026: de 37 para 66 migrações, de 281 para 738 testes de
+        servidor e de 111 para 281 de tela. O que isso virou na operação:</p>
+      <div class="grade g2">
+        <div class="carta">
+          <h3 style="margin-top:0">Abas e telas</h3>
+          <ul class="lista">
+            <li><strong>Pagamento de Frete</strong> — o controle do frete por carga, com leitura
+              do PDF, pagamento por nota e relatório detalhado (outubro).</li>
+            <li><strong>Usuários com senha própria</strong> — gerenciar operadores pede a senha
+              da aba, conferida pelo servidor (09/10).</li>
+            <li><strong>Devoluções nas filiais</strong> — 105 BSB, 106 Bahia e 107 ES no mesmo ciclo.</li>
+            <li><strong>Toda carga é um link</strong> — de qualquer lugar onde a carga aparece,
+              um toque leva à linha do tempo dela, à Torre ou ao frete (14/10).</li>
+            <li><strong>A carga inteira num lugar só</strong> — ao abrir a carga, aparece também
+              o que o Frete sabe dela (14/10).</li>
+          </ul>
+        </div>
+        <div class="carta">
+          <h3 style="margin-top:0">Proteção</h3>
+          <ul class="lista">
+            <li><strong>Vigia de dentro</strong> — reinicia o servidor travado, confere backup,
+              disco e certificado, e avisa no celular da Administração (05/10).</li>
+            <li><strong>Vigia de fora</strong> — no GitHub, a cada 30 minutos; verde na última
+              rodada de hoje, 14/10.</li>
+            <li><strong>Carga há mais de 3 h no pátio</strong> avisa no celular da
+              Administração (11/10).</li>
+            <li><strong>Restauração do backup provada</strong> no servidor (30/09) e, desde
+              05/10, toda semana sozinha.</li>
+            <li><strong>Node 24</strong> no servidor (01/10) e <strong>Ubuntu atualizado</strong> (02/10).</li>
+          </ul>
+        </div>
+      </div>
     </section>
 
     <section id="pendencias">
       <h2>O que ainda falta</h2>
       <p class="sub">Um mapa honesto mostra também o que não está pronto. Estes são os pontos
-        abertos hoje — nenhum impede a operação, todos merecem data.</p>
+        abertos em 14/10 — nenhum impede a operação, todos merecem data.</p>
       <div class="grade g2">
         <div class="carta">
           <h3 style="margin-top:0">Segurança e continuidade</h3>
           <ul class="lista">
-            <li><strong>Trocar a senha de root</strong> do servidor.</li>
+            <li><strong>Trocar a senha de root</strong> do servidor — não há registro de que foi feito.</li>
             <li><strong>Segundo responsável técnico</strong> — hoje só você acessa a VPS.</li>
-            <li><strong>Monitor de queda</strong> (UptimeRobot) para avisar antes do pátio perceber.</li>
+            <li><strong>Ligar o Sentry</strong> — o código está no servidor desde 09/10; falta a
+              chave no <code style="font-family:var(--mono);color:var(--ouro)">.env</code>.</li>
+            <li><strong>Cópia do backup fora do servidor</strong> — você informou em 30/09 que está
+              configurada e testada; daqui não dá para ver (é conta sua).</li>
           </ul>
         </div>
         <div class="carta">
           <h3 style="margin-top:0">Operação</h3>
           <ul class="lista">
-            <li><strong>6 códigos de rota</strong> ainda faltando no cadastro.</li>
-            <li><strong>Atualização de pacotes</strong> em janela combinada.</li>
+            <li><strong>Aba Sinistros</strong> (Lara) — roubo, furto e acidente; esperando o
+              material dela.</li>
+            <li><strong>Correção sem telefonema</strong> — o setor pede, a Administração aprova
+              no celular; aprovada em 14/10, em desenho.</li>
+            <li><strong>Montagem vinda do Atak</strong> — esperando um exemplo do relatório.</li>
+            <li><strong>6 destinos sem código de rota</strong> na planilha da semana
+              (GPA-DF, Restaurante Gaúcha, Minas Indústrias, Hong Kong, Suinco–Leila,
+              Suinco–Maria Eduarda).</li>
+            <li><strong>Vigia do frete</strong> acusou problema no dado do Pagamento de Frete
+              em 11/10 — qual regra acendeu está na caixa Vigias do sistema.</li>
             <li><strong>Robô de WhatsApp</strong> com o resumo do dia — projetado, não construído.</li>
           </ul>
         </div>
@@ -561,8 +667,9 @@ bash entregaveis/suinco_logistica/backend/atualizar_tudo.sh</pre>
 
 <footer>
   Programação de Embarque · Suinco - Cooperativa de Suinocultores Ltda · documento de uso interno,
-  atualizado em 27/08/2026. Todo dado técnico aqui foi conferido no código e no servidor
-  no momento da escrita — não é resumo de memória.
+  atualizado em 14/10/2026 — painel no ar no portão 89, servidor em c38dcf0 (66 migrações,
+  Node v24.21.0). Todo dado técnico aqui foi conferido no código e no registro do servidor
+  no momento da escrita — não é resumo de memória. O mapa detalhado, peça por peça, é o raio-X.
 </footer>
 
 <script>

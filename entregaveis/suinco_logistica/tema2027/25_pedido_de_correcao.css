@@ -1,0 +1,42 @@
+/* =====================================================================
+   CORREÇÃO SEM TELEFONEMA (14/10/2026, aprovado pelo dono: "marcha fio")
+   ---------------------------------------------------------------------
+   Dona de: .pedido-correcao (um pedido, igual na caixa do topo do Histórico
+   e na linha do tempo da carga) e .pedir-correcao (o "Errou a etapa?" de
+   quem deu o passo). A caixa de quem PEDE é .correcao-carga, com a mesma
+   cara da .admin-carga mas outro nome: .admin-carga quer dizer "só a
+   Administração vê" (test_admin_historico conta por ela — portão 90). Na
+   linha do tempo da Administração o pedido entra numa .admin-carga mesmo.
+
+   NO PAPEL tudo isto some pela classe .no-print de sempre — este arquivo
+   só fala com a tela (test_tema2027_so_tela).
+   ===================================================================== */
+@media screen{
+  .pedido-correcao{ display:grid; gap:4px; padding:10px 0 }
+  .pedido-correcao + .pedido-correcao{ border-top:1px solid var(--border) }
+  .pedido-correcao-linha{ font-size:14px; line-height:1.4 }
+  .pedido-correcao-etapas{ font-weight:700 }
+  .pedido-correcao-quem{ font-size:12px; color:var(--text-dim) }
+  .pedido-correcao-motivo{ font-size:14px; line-height:1.45 }
+  .pedido-correcao-acoes{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:4px }
+  .pedido-correcao-acoes input[type="text"]{ flex:1 1 180px; min-width:0 }
+
+  .correcao-carga{ margin-top:14px; padding:12px 14px; border:1px dashed var(--gold);
+    border-radius:10px; background:var(--acento-hover) }
+  .correcao-carga-tit{ font-weight:800; color:var(--gold-text); font-size:.92rem; letter-spacing:.3px }
+  .correcao-carga-sub{ font-size:.8rem; color:var(--text-dim); margin:4px 0 10px; line-height:1.4 }
+  .correcao-carga-linha{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px }
+  .correcao-carga-linha input[type="text"]{ flex:1 1 200px; min-width:0 }
+
+  .pedir-correcao > summary{ cursor:pointer; font-weight:700; color:var(--gold-text) }
+  .pedir-correcao > summary:focus-visible{ outline:2px solid var(--gold); outline-offset:2px; border-radius:2px }
+  .pedir-correcao[open] > summary{ margin-bottom:6px }
+}
+@media screen and (max-width:820px){
+  /* No celular o dedo precisa de 44 px (DESIGN.md). */
+  .pedir-correcao > summary{ min-height:44px; display:flex; align-items:center }
+  .pedido-correcao-acoes .btn,
+  .correcao-carga-linha .btn{ min-height:44px }
+  .pedido-correcao-acoes input[type="text"],
+  .correcao-carga-linha input[type="text"]{ min-height:44px; flex-basis:100% }
+}

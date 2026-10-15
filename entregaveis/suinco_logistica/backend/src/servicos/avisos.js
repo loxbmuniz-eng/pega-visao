@@ -325,3 +325,39 @@ export function avisarFimDaProgramacao(totalDoDia) {
     url: '/',
   });
 }
+
+/* ---------------------------------------------------------------------
+   CORREÇÃO SEM TELEFONEMA (14/10/2026, migração 067)
+   ---------------------------------------------------------------------
+   O pedido vai para o celular da Administração; a decisão volta para o
+   celular de quem pediu. Sem as duas pontas, "sem telefonema" vira "liga
+   para saber se aprovaram". A mensagem é função pura para o teste ler o
+   que vai na tela do celular sem precisar de chave de aviso. */
+export function mensagemDoPedidoDeCorrecao(p) {
+  return {
+    titulo: `✋ Pedido de correção · carga ${p.numeroCarga || p.placa || ''}`.trim(),
+    corpo: `${p.deStatus} → ${p.paraStatus}. ${p.pedidoPor} (${p.pedidoSetor}): ${p.motivo}`,
+    tag: `correcao:${p.id}`,
+    url: '/',
+  };
+}
+
+export function mensagemDaDecisaoDaCorrecao(p) {
+  const aprovado = p.decisao === 'aprovado';
+  return {
+    titulo: `${aprovado ? '✅ Correção aprovada' : '✖ Correção recusada'} · carga ${p.numeroCarga || p.placa || ''}`.trim(),
+    corpo: aprovado
+      ? `A carga voltou para ${p.paraStatus}. ${p.decididoPor} aprovou.`
+      : `A carga continua em ${p.deStatus}. ${p.decididoPor} recusou${p.obsDecisao ? `: ${p.obsDecisao}` : '.'}`,
+    tag: `correcao:${p.id}`,
+    url: '/',
+  };
+}
+
+export function avisarPedidoDeCorrecao(p) {
+  return enviarParaSetores(['Administração'], mensagemDoPedidoDeCorrecao(p));
+}
+
+export function avisarDecisaoDaCorrecao(p, operadorId) {
+  return enviarParaOperador(operadorId, mensagemDaDecisaoDaCorrecao(p));
+}

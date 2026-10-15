@@ -31,6 +31,7 @@ import { rotasIndicadores } from './rotas/indicadores.js';
 import { rotasRelatorios } from './rotas/relatorios.js';
 import { rotasDevolucoes } from './rotas/devolucoes.js';
 import { rotasPagamentoFrete } from './rotas/pagamento_frete.js';
+import { rotasPedidosCorrecao } from './rotas/pedidos_correcao.js';
 import { rotasErros } from './rotas/erros.js';
 import { avisarErro, ligarRegistroDeQueda, enviarQuedaPendente, avisoLigado } from './servicos/erros.js';
 
@@ -445,6 +446,7 @@ export function criarApp() {
   app.use('/api', rotasRelatorios);
   app.use('/api', rotasDevolucoes);
   app.use('/api', rotasPagamentoFrete);
+  app.use('/api', rotasPedidosCorrecao);
   app.use('/api', rotasVigia);
   app.use('/api', rotasIndicadores);
   app.use('/api', rotasErros);

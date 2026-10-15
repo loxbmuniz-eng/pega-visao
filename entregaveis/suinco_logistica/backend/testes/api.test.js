@@ -8785,3 +8785,225 @@ describe('61. A Logística trabalha no Pagamento de Frete (09/10/2026, decisão 
     }
   });
 });
+
+/* ------------------------------------------------------------------ */
+describe('62. Correção sem telefonema: o setor pede, a Administração decide (14/10/2026, migração 067)', () => {
+  /* Pedido do dono, aprovado com "marcha fio": quem avançou a etapa por
+     engano (Portaria, Expedição, Faturamento) ou a Logística PEDE voltar
+     para a etapa anterior, com motivo; a Administração recebe no celular e
+     aprova ou recusa. Aprovar é a MESMA correção da rota corrigir-etapa —
+     uma função, dois chamadores — com quem pediu e quem aprovou na trilha. */
+  const adm = () => tokens['Administração'];
+  const PEDIDOS = '/api/pedidos-correcao';
+  const placas = [];
+  const criar = async (numero, passos) => {
+    const placa = placas.shift();
+    await pool.query('DELETE FROM pedidos_correcao WHERE carga_id IN (SELECT carga_id FROM fact_viagens WHERE placa = $1)', [placa]);
+    await pool.query('DELETE FROM fact_statusfrota WHERE placa = $1', [placa]);
+    await pool.query('DELETE FROM fact_viagens WHERE placa = $1', [placa]);
+    const r = await req('/api/cargas', {
+      metodo: 'POST', token: tokens['Logística'],
+      corpo: { placa, numeroCarga: numero, cliente: 'C', destino: 'D', peso: 1000 },
+    });
+    assert.equal(r.status, 201, r.texto);
+    for (const [setor, status, extra] of passos) {
+      const t = await req(`/api/cargas/${r.json.id}/status`, {
+        metodo: 'POST', token: tokens[setor], corpo: { status, ...(extra || {}) },
+      });
+      assert.equal(t.status, 200, t.texto);
+    }
+    return r.json.id;
+  };
+  const pedir = (id, token, motivo = 'apertei Iniciar na carga errada') =>
+    req(`/api/cargas/${id}/pedir-correcao`, { metodo: 'POST', token, corpo: { motivo } });
+  const decidir = (pedidoId, token, decisao, obs = '') =>
+    req(`${PEDIDOS}/${pedidoId}/decidir`, { metodo: 'POST', token, corpo: { decisao, obs } });
+  const statusDa = async (id) =>
+    (await pool.query('SELECT status_atual FROM fact_viagens WHERE carga_id = $1', [id])).rows[0].status_atual;
+
+  let id;
+  before(async () => {
+    const { rows } = await pool.query('SELECT placa FROM dim_veiculos ORDER BY placa OFFSET 80 LIMIT 5');
+    placas.push(...rows.map((r) => r.placa));
+    id = await criar('67001', [['Portaria', 'Aguardando Embarque'], ['Expedição', 'Embarque Iniciado']]);
+  });
+
+  test('sem motivo, não pede', async () => {
+    const r = await pedir(id, tokens['Expedição'], '   ');
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'MOTIVO_OBRIGATORIO');
+  });
+
+  test('quem não fez o passo não pede — e a recusa diz quem pode', async () => {
+    for (const setor of ['Faturamento', 'Portaria']) {
+      const r = await pedir(id, tokens[setor]);
+      assert.equal(r.status, 403, `${setor}: ${r.texto}`);
+      assert.equal(r.json.codigo, 'SETOR_SEM_PERMISSAO');
+      assert.match(r.json.erro, /Expedição/, 'a recusa diz quem fez o passo');
+    }
+  });
+
+  test('a Administração não pede: corrige direto, e a recusa diz onde', async () => {
+    const r = await pedir(id, adm());
+    assert.equal(r.status, 400, r.texto);
+    assert.equal(r.json.codigo, 'ADMINISTRACAO_CORRIGE_DIRETO');
+    assert.match(r.json.erro, /Histórico/);
+  });
+
+  test('a Expedição pede voltar Embarque Iniciado → Aguardando Embarque: a carga NÃO muda, a trilha registra o pedido', async () => {
+    const movAntes = (await pool.query('SELECT count(*)::int AS n FROM fact_statusfrota WHERE carga_id = $1', [id])).rows[0].n;
+    const r = await pedir(id, tokens['Expedição']);
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.deStatus, 'Embarque Iniciado');
+    assert.equal(r.json.paraStatus, 'Aguardando Embarque');
+    assert.equal(r.json.pedidoSetor, 'Expedição');
+    assert.equal(r.json.pedidoPor, 'Carla');
+    assert.equal(r.json.numeroCarga, '67001');
+    assert.equal(r.json.decisao, null);
+    assert.equal(await statusDa(id), 'Embarque Iniciado', 'pedir não muda nada: quem decide é a Administração');
+    const movDepois = (await pool.query('SELECT count(*)::int AS n FROM fact_statusfrota WHERE carga_id = $1', [id])).rows[0].n;
+    assert.equal(movDepois, movAntes, 'pedido não é movimentação de status');
+    const { rows: log } = await pool.query(
+      "SELECT acao, setor FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Pedido de correção%' ORDER BY data_evento DESC LIMIT 1", [id]);
+    assert.ok(log[0], 'o pedido fica na trilha da carga');
+    assert.match(log[0].acao, /Embarque Iniciado → Aguardando Embarque/);
+    assert.match(log[0].acao, /apertei Iniciar na carga errada/);
+  });
+
+  test('um pedido aberto por carga: o segundo é recusado', async () => {
+    const r = await pedir(id, tokens['Logística'], 'outro motivo');
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'PEDIDO_JA_ABERTO');
+  });
+
+  test('a lista: a Administração vê o pedido aberto; a Expedição vê o do setor dela; a Portaria não vê', async () => {
+    const a = await req(PEDIDOS, { token: adm() });
+    assert.equal(a.status, 200, a.texto);
+    const meu = a.json.find((p) => p.cargaId === id);
+    assert.ok(meu, 'a Administração vê o pedido');
+    assert.ok(meu.placa, 'a placa vem junto');
+    const e = await req(PEDIDOS, { token: tokens['Expedição'] });
+    assert.equal(e.status, 200, e.texto);
+    assert.ok(e.json.some((p) => p.cargaId === id), 'quem pediu acompanha o pedido');
+    const p = await req(PEDIDOS, { token: tokens['Portaria'] });
+    assert.equal(p.status, 200, p.texto);
+    assert.ok(!p.json.some((x) => x.cargaId === id), 'pedido de outro setor não aparece');
+  });
+
+  test('só a Administração decide', async () => {
+    const meu = (await req(PEDIDOS, { token: adm() })).json.find((p) => p.cargaId === id);
+    const r = await decidir(meu.id, tokens['Expedição'], 'aprovado');
+    assert.equal(r.status, 403, r.texto);
+    const x = await decidir(meu.id, adm(), 'talvez');
+    assert.equal(x.status, 400, x.texto);
+    assert.equal(x.json.codigo, 'DECISAO_INVALIDA');
+  });
+
+  test('a Administração RECUSA: a carga não muda, a decisão fica gravada, e um pedido novo pode ser aberto', async () => {
+    const meu = (await req(PEDIDOS, { token: adm() })).json.find((p) => p.cargaId === id);
+    const r = await decidir(meu.id, adm(), 'recusado', 'o embarque começou mesmo');
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.decisao, 'recusado');
+    assert.equal(r.json.decididoPor, 'Admin Um');
+    assert.equal(r.json.obsDecisao, 'o embarque começou mesmo');
+    assert.equal(await statusDa(id), 'Embarque Iniciado');
+    const de2 = await decidir(meu.id, adm(), 'aprovado');
+    assert.equal(de2.status, 409, de2.texto);
+    assert.equal(de2.json.codigo, 'PEDIDO_JA_DECIDIDO');
+    const { rows: log } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Pedido de correção RECUSADO%'", [id]);
+    assert.equal(log.length, 1, 'a recusa fica na trilha');
+  });
+
+  test('a Administração APROVA: é a mesma correção de etapa, com quem pediu e quem aprovou na trilha', async () => {
+    const p = await pedir(id, tokens['Expedição'], 'iniciei a carga errada, era a da doca 2');
+    assert.equal(p.status, 201, p.texto);
+    const r = await decidir(p.json.id, adm(), 'aprovado');
+    assert.equal(r.status, 200, r.texto);
+    assert.equal(r.json.decisao, 'aprovado');
+    assert.equal(await statusDa(id), 'Aguardando Embarque');
+    const { rows } = await pool.query(
+      `SELECT status_anterior, status_novo, setor FROM fact_statusfrota
+        WHERE carga_id = $1 ORDER BY data_evento DESC LIMIT 1`, [id]);
+    assert.equal(rows[0].status_anterior, 'Embarque Iniciado');
+    assert.equal(rows[0].status_novo, 'Aguardando Embarque');
+    assert.equal(rows[0].setor, 'Administração', 'quem aplica a correção é a Administração');
+    const { rows: log } = await pool.query(
+      "SELECT acao FROM log_eventos WHERE carga_id = $1 AND acao LIKE 'Etapa REVERTIDA%' ORDER BY data_evento DESC LIMIT 1", [id]);
+    assert.ok(log[0]);
+    assert.match(log[0].acao, /Pedido de Carla \(Expedição\)/);
+    assert.match(log[0].acao, /iniciei a carga errada, era a da doca 2/);
+    assert.match(log[0].acao, /aprovado por Admin Um/i);
+    const lista = await req(PEDIDOS, { token: adm() });
+    assert.ok(!lista.json.some((x) => x.cargaId === id), 'decidido, sai da lista de abertos');
+    const anda = await req(`/api/cargas/${id}/status`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { status: 'Embarque Iniciado' },
+    });
+    assert.equal(anda.status, 200, 'depois de voltar, a carga anda de novo pelo caminho normal');
+  });
+
+  test('a carga mudou de etapa depois do pedido: aprovar é recusado e nada muda', async () => {
+    const outra = await criar('67002', [['Portaria', 'Aguardando Embarque']]);
+    const p = await pedir(outra, tokens['Logística'], 'registrei a chegada da placa errada');
+    assert.equal(p.status, 201, p.texto);
+    assert.equal(p.json.paraStatus, 'Aguardando Veículo');
+    const anda = await req(`/api/cargas/${outra}/status`, {
+      metodo: 'POST', token: tokens['Expedição'], corpo: { status: 'Embarque Iniciado' },
+    });
+    assert.equal(anda.status, 200, anda.texto);
+    const r = await decidir(p.json.id, adm(), 'aprovado');
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'CARGA_MUDOU_DE_ETAPA');
+    assert.match(r.json.erro, /Embarque Iniciado/);
+    assert.equal(await statusDa(outra), 'Embarque Iniciado');
+    const aberto = (await req(PEDIDOS, { token: adm() })).json.find((x) => x.id === p.json.id);
+    assert.ok(aberto, 'o pedido continua aberto para a Administração recusar ou corrigir direto');
+    assert.equal((await decidir(p.json.id, adm(), 'recusado', 'a carga já andou')).status, 200);
+  });
+
+  test('carga na primeira etapa não tem o que voltar', async () => {
+    const nova = await criar('67003', []);
+    const r = await pedir(nova, tokens['Logística']);
+    assert.equal(r.status, 409, r.texto);
+    assert.equal(r.json.codigo, 'NADA_A_VOLTAR');
+  });
+
+  test('a saída só de devolução volta para Aguardando Embarque, não para Faturado', async () => {
+    const dev = await criar('67004', [
+      ['Portaria', 'Aguardando Embarque'],
+      ['Portaria', 'Seguiu Viagem', { soDevolucao: true }],
+    ]);
+    const r = await pedir(dev, tokens['Portaria'], 'o caminhão ficou para carregar');
+    assert.equal(r.status, 201, r.texto);
+    assert.equal(r.json.deStatus, 'Seguiu Viagem');
+    assert.equal(r.json.paraStatus, 'Aguardando Embarque', 'volta para onde a carga estava de verdade');
+    assert.equal((await decidir(r.json.id, adm(), 'recusado')).status, 200);
+  });
+
+  test('o aviso no celular da Administração diz a carga, de onde para onde, quem pediu e o motivo', async () => {
+    const { mensagemDoPedidoDeCorrecao } = await import('../src/servicos/avisos.js');
+    const m = mensagemDoPedidoDeCorrecao({
+      numeroCarga: '67001', placa: 'ABC1D23', deStatus: 'Embarque Iniciado', paraStatus: 'Aguardando Embarque',
+      pedidoPor: 'Carla', pedidoSetor: 'Expedição', motivo: 'apertei errado', id: 9,
+    });
+    assert.match(m.titulo, /67001/);
+    assert.match(m.corpo, /Embarque Iniciado → Aguardando Embarque/);
+    assert.match(m.corpo, /Carla \(Expedição\)/);
+    assert.match(m.corpo, /apertei errado/);
+    assert.equal(m.tag, 'correcao:9');
+  });
+
+  test('servidor sem a migração 067: pedir responde 503 explicado; a lista vem vazia (a tela não quebra)', async () => {
+    await pool.query('ALTER TABLE pedidos_correcao RENAME TO pedidos_correcao_067_fora');
+    try {
+      const r = await pedir(id, tokens['Expedição']);
+      assert.equal(r.status, 503, r.texto);
+      assert.equal(r.json.codigo, 'CORRECAO_SEM_MIGRACAO');
+      const l = await req(PEDIDOS, { token: adm() });
+      assert.equal(l.status, 200, l.texto);
+      assert.deepEqual(l.json, []);
+    } finally {
+      await pool.query('ALTER TABLE pedidos_correcao_067_fora RENAME TO pedidos_correcao');
+    }
+  });
+});

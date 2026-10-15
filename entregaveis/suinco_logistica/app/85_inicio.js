@@ -183,6 +183,9 @@ async function init(){
     // placa. Chega por fora da sincronia porque é notícia, não dado.
     if(SuincoSharePoint.aoEditarCarga) SuincoSharePoint.aoEditarCarga(receberEdicaoRemota);
     if(SuincoSharePoint.aoExcluirCarga) SuincoSharePoint.aoExcluirCarga(receberExclusaoRemota);
+    // Pedido de correção aberto ou decidido (14/10/2026): a caixa da
+    // Administração e o aviso para quem pediu.
+    if(SuincoSharePoint.aoAtualizarCorrecao) SuincoSharePoint.aoAtualizarCorrecao(receberPedidoDeCorrecao);
     // Quem está online, pra aba Usuários. Só redesenha se a aba estiver
     // aberta agora — nas outras telas a lista fica guardada e some vale na
     // próxima vez que a Administração abrir Usuários.
